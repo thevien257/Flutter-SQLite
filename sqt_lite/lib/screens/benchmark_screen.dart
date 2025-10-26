@@ -1,9 +1,10 @@
 // lib/screens/benchmark_screen.dart
 
 import 'package:flutter/material.dart';
+
+import '../drift/database.dart';
 import '../performance/benchmark.dart';
 import '../sqlite/database_helper.dart';
-import '../drift/database.dart';
 
 class BenchmarkScreen extends StatefulWidget {
   const BenchmarkScreen({super.key});
@@ -20,14 +21,12 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
   List<BenchmarkResult> _results = [];
   bool _isRunning = false;
   String _currentTest = '';
+  int _sampleSize = 10000; // Số lượng mẫu mặc định
 
   @override
   void initState() {
     super.initState();
-    _benchmark = PerformanceBenchmark(
-      sqliteDb: _sqliteDb,
-      driftDb: _driftDb,
-    );
+    _benchmark = PerformanceBenchmark(sqliteDb: _sqliteDb, driftDb: _driftDb);
   }
 
   @override
@@ -42,23 +41,62 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       appBar: AppBar(
         title: const Text('Performance Benchmark'),
         backgroundColor: Colors.green,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showSampleSizeDialog,
+          ),
+        ],
       ),
       body: Column(
         children: [
           _buildHeader(),
           if (_isRunning) _buildProgressIndicator(),
           Expanded(
-            child: _results.isEmpty
-                ? _buildEmptyState()
-                : _buildResultsList(),
+            child: _results.isEmpty ? _buildEmptyState() : _buildResultsList(),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isRunning ? null : _runBenchmarks,
         icon: const Icon(Icons.play_arrow),
-        label: const Text('Run Benchmarks'),
+        label: Text('Run with $_sampleSize items'),
         backgroundColor: _isRunning ? Colors.grey : Colors.green,
+      ),
+    );
+  }
+
+  void _showSampleSizeDialog() {
+    final controller = TextEditingController(text: _sampleSize.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set Sample Size'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Number of items',
+            hintText: 'Enter sample size (e.g., 5000)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value > 0) {
+                setState(() => _sampleSize = value);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Set'),
+          ),
+        ],
       ),
     );
   }
@@ -74,9 +112,9 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Compare SQLite vs Drift on various operations',
-            style: TextStyle(color: Colors.grey),
+          Text(
+            'Compare SQLite vs Drift ($_sampleSize items)',
+            style: const TextStyle(color: Colors.grey),
           ),
           if (_results.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -88,13 +126,22 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
   }
 
   Widget _buildSummary() {
-    final sqliteResults = _results.where((r) => r.operation.startsWith('SQLite')).toList();
-    final driftResults = _results.where((r) => r.operation.startsWith('Drift')).toList();
+    final sqliteResults = _results
+        .where((r) => r.operation.startsWith('SQLite'))
+        .toList();
+    final driftResults = _results
+        .where((r) => r.operation.startsWith('Drift'))
+        .toList();
 
-    if (sqliteResults.isEmpty || driftResults.isEmpty) return const SizedBox.shrink();
+    if (sqliteResults.isEmpty || driftResults.isEmpty)
+      return const SizedBox.shrink();
 
-    final sqliteAvg = sqliteResults.map((r) => r.duration).reduce((a, b) => a + b) / sqliteResults.length;
-    final driftAvg = driftResults.map((r) => r.duration).reduce((a, b) => a + b) / driftResults.length;
+    final sqliteAvg =
+        sqliteResults.map((r) => r.duration).reduce((a, b) => a + b) /
+        sqliteResults.length;
+    final driftAvg =
+        driftResults.map((r) => r.duration).reduce((a, b) => a + b) /
+        driftResults.length;
 
     final faster = sqliteAvg < driftAvg ? 'SQLite' : 'Drift';
     final diff = sqliteAvg < driftAvg
@@ -162,6 +209,11 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
             style: TextStyle(fontSize: 20, color: Colors.grey),
           ),
           const SizedBox(height: 8),
+          Text(
+            'Current sample size: $_sampleSize items',
+            style: const TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
           const Text(
             'Tap the button below to run tests',
             style: TextStyle(color: Colors.grey),
@@ -193,9 +245,7 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
               result.operation,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: result.count > 0
-                ? Text('${result.count} items')
-                : null,
+            subtitle: result.count > 0 ? Text('${result.count} items') : null,
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -219,6 +269,7 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
   Color _getSpeedColor(int duration) {
     if (duration < 100) return Colors.green;
     if (duration < 500) return Colors.orange;
+    if (duration < 2000) return Colors.deepOrange;
     return Colors.red;
   }
 
@@ -230,16 +281,25 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
     });
 
     try {
-      // 1. INSERT Test
-      setState(() => _currentTest = 'Testing INSERT performance (1000 items)...');
+      // 1. Chuẩn bị - Xóa dữ liệu cũ
+      setState(() => _currentTest = 'Clearing old data...');
+      await _sqliteDb.clearAllData();
+      await _driftDb.clearAllData();
       await Future.delayed(const Duration(milliseconds: 500));
-      _results.add(await _benchmark.benchmarkSQLiteInsert(1000));
+
+      // 2. INSERT Test với $_sampleSize items
+      setState(
+        () =>
+            _currentTest = 'Testing INSERT performance ($_sampleSize items)...',
+      );
+      await Future.delayed(const Duration(milliseconds: 500));
+      _results.add(await _benchmark.benchmarkSQLiteInsert(_sampleSize));
       setState(() {});
 
-      _results.add(await _benchmark.benchmarkDriftInsert(1000));
+      _results.add(await _benchmark.benchmarkDriftInsert(_sampleSize));
       setState(() {});
 
-      // 2. QUERY Test
+      // 3. QUERY Test
       setState(() => _currentTest = 'Testing QUERY performance...');
       await Future.delayed(const Duration(milliseconds: 500));
       _results.add(await _benchmark.benchmarkSQLiteQuery());
@@ -248,7 +308,7 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       _results.add(await _benchmark.benchmarkDriftQuery());
       setState(() {});
 
-      // 3. JOIN Test
+      // 4. JOIN Test
       setState(() => _currentTest = 'Testing JOIN performance...');
       await Future.delayed(const Duration(milliseconds: 500));
       _results.add(await _benchmark.benchmarkSQLiteJoin());
@@ -257,7 +317,7 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       _results.add(await _benchmark.benchmarkDriftJoin());
       setState(() {});
 
-      // 4. SEARCH Test
+      // 5. SEARCH Test
       setState(() => _currentTest = 'Testing SEARCH performance...');
       await Future.delayed(const Duration(milliseconds: 500));
       _results.add(await _benchmark.benchmarkSQLiteSearch('Product'));
@@ -266,7 +326,7 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       _results.add(await _benchmark.benchmarkDriftSearch('Product'));
       setState(() {});
 
-      // 5. AGGREGATE Test
+      // 6. AGGREGATE Test
       setState(() => _currentTest = 'Testing AGGREGATE performance...');
       await Future.delayed(const Duration(milliseconds: 500));
       _results.add(await _benchmark.benchmarkSQLiteAggregate());
@@ -279,21 +339,17 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       await Future.delayed(const Duration(seconds: 1));
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Benchmarks completed successfully!'),
+        SnackBar(
+          content: Text('✅ Benchmarks with $_sampleSize items completed!'),
           backgroundColor: Colors.green,
         ),
       );
 
       // Print results to console
       _benchmark.printResults(_results);
-
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red),
       );
     } finally {
       setState(() {

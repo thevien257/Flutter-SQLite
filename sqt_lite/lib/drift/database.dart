@@ -17,7 +17,8 @@ class Products extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
   RealColumn get price => real()();
-  IntColumn get categoryId => integer().references(Categories, #id, onDelete: KeyAction.cascade)();
+  IntColumn get categoryId =>
+      integer().references(Categories, #id, onDelete: KeyAction.cascade)();
   IntColumn get stock => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -69,15 +70,21 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<List<Category>> getAllCategories() {
-    return (select(categories)..orderBy([(t) => OrderingTerm(expression: t.name)])).get();
+    return (select(
+      categories,
+    )..orderBy([(t) => OrderingTerm(expression: t.name)])).get();
   }
 
   Stream<List<Category>> watchAllCategories() {
-    return (select(categories)..orderBy([(t) => OrderingTerm(expression: t.name)])).watch();
+    return (select(
+      categories,
+    )..orderBy([(t) => OrderingTerm(expression: t.name)])).watch();
   }
 
   Future<Category?> getCategoryById(int id) {
-    return (select(categories)..where((t) => t.id.equals(id))).getSingleOrNull();
+    return (select(
+      categories,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   Future<bool> updateCategory(Category category) {
@@ -99,14 +106,16 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<List<Product>> getAllProducts() {
-    return (select(products)
-      ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
+    return (select(products)..orderBy([
+          (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+        ]))
         .get();
   }
 
   Stream<List<Product>> watchAllProducts() {
-    return (select(products)
-      ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
+    return (select(products)..orderBy([
+          (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+        ]))
         .watch();
   }
 
@@ -127,14 +136,16 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteProductsByCategory(int categoryId) {
-    return (delete(products)..where((t) => t.categoryId.equals(categoryId))).go();
+    return (delete(
+      products,
+    )..where((t) => t.categoryId.equals(categoryId))).go();
   }
 
   // ========== COMPLEX QUERIES ==========
 
   Future<List<ProductWithCategoryData>> getProductsWithCategory() {
     final query = select(products).join([
-      innerJoin(categories, categories.id.equalsExp(products.categoryId))
+      innerJoin(categories, categories.id.equalsExp(products.categoryId)),
     ]);
 
     return query.get().then((rows) {
@@ -149,7 +160,7 @@ class AppDatabase extends _$AppDatabase {
 
   Stream<List<ProductWithCategoryData>> watchProductsWithCategory() {
     final query = select(products).join([
-      innerJoin(categories, categories.id.equalsExp(products.categoryId))
+      innerJoin(categories, categories.id.equalsExp(products.categoryId)),
     ]);
 
     return query.watch().map((rows) {
@@ -164,8 +175,8 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Product>> getProductsByCategory(int categoryId) {
     return (select(products)
-      ..where((t) => t.categoryId.equals(categoryId))
-      ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..where((t) => t.categoryId.equals(categoryId))
+          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
         .get();
   }
 
@@ -176,14 +187,18 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<String, int>> getStockByCategory() async {
     final query = selectOnly(products)
       ..addColumns([categories.name, products.stock.sum()])
-      ..join([innerJoin(categories, categories.id.equalsExp(products.categoryId))])
+      ..join([
+        innerJoin(categories, categories.id.equalsExp(products.categoryId)),
+      ])
       ..groupBy([categories.name])
-      ..orderBy([OrderingTerm(expression: products.stock.sum(), mode: OrderingMode.desc)]);
+      ..orderBy([
+        OrderingTerm(expression: products.stock.sum(), mode: OrderingMode.desc),
+      ]);
 
     final results = await query.get();
     return {
       for (var row in results)
-        row.read(categories.name)!: row.read(products.stock.sum()) ?? 0
+        row.read(categories.name)!: row.read(products.stock.sum()) ?? 0,
     };
   }
 
@@ -193,7 +208,11 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<void> transferStock(int fromProductId, int toProductId, int amount) async {
+  Future<void> transferStock(
+    int fromProductId,
+    int toProductId,
+    int amount,
+  ) async {
     await transaction(() async {
       final fromProduct = await getProductById(fromProductId);
       final toProduct = await getProductById(toProductId);
@@ -206,7 +225,9 @@ class AppDatabase extends _$AppDatabase {
         throw Exception('Insufficient stock');
       }
 
-      await updateProduct(fromProduct.copyWith(stock: fromProduct.stock - amount));
+      await updateProduct(
+        fromProduct.copyWith(stock: fromProduct.stock - amount),
+      );
       await updateProduct(toProduct.copyWith(stock: toProduct.stock + amount));
     });
   }

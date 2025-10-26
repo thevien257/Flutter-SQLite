@@ -1,11 +1,11 @@
 // lib/screens/home_screen.dart
 
 import 'package:flutter/material.dart';
-import 'sqlite_screen.dart';
-import 'drift_screen.dart';
-import 'benchmark_screen.dart';
+
 import '../sqlite/database_helper.dart';
-import '../drift/database.dart';
+import 'benchmark_screen.dart';
+import 'drift_screen.dart';
+import 'sqlite_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -41,11 +41,9 @@ class HomeScreen extends StatelessWidget {
                 'Traditional sqflite package',
                 Icons.list,
                 Colors.blue,
-                    () => Navigator.push(
+                () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const SQLiteScreen(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const SQLiteScreen()),
                 ),
               ),
               const SizedBox(height: 16),
@@ -55,11 +53,9 @@ class HomeScreen extends StatelessWidget {
                 'Type-safe database with reactive queries',
                 Icons.star,
                 Colors.orange,
-                    () => Navigator.push(
+                () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const DriftScreen(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const DriftScreen()),
                 ),
               ),
               const SizedBox(height: 16),
@@ -69,7 +65,7 @@ class HomeScreen extends StatelessWidget {
                 'Benchmark SQLite vs Drift',
                 Icons.assessment,
                 Colors.green,
-                    () => Navigator.push(
+                () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const BenchmarkScreen(),
@@ -86,13 +82,13 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildOptionCard(
-      BuildContext context,
-      String title,
-      String subtitle,
-      IconData icon,
-      Color color,
-      VoidCallback onTap,
-      ) {
+    BuildContext context,
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Card(
       elevation: 4,
       child: ListTile(
@@ -100,10 +96,7 @@ class HomeScreen extends StatelessWidget {
           backgroundColor: color,
           child: Icon(icon, color: Colors.white),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.arrow_forward),
         onTap: onTap,
@@ -150,9 +143,6 @@ class HomeScreen extends StatelessWidget {
 
   Future<Map<String, String>> _getDatabasePaths() async {
     final sqlitePath = await DatabaseHelper.instance.getDatabasePath();
-    return {
-      'sqlite': sqlitePath,
-      'drift': 'products_drift.sqlite',
-    };
+    return {'sqlite': sqlitePath, 'drift': 'products_drift.sqlite'};
   }
 }
